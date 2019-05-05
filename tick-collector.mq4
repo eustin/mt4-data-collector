@@ -34,9 +34,9 @@ string file_timestamp() {
    return (file_time); 
 }
 
-string make_file_name() {
+string make_file_name(int period) {
    string file_name;
-   file_name = Symbol() + "_" + Period() + "_" + file_timestamp() + "_" + MathRand() + ".csv";
+   file_name = Symbol() + "_" + period + "_" + file_timestamp() + "_" + MathRand() + ".csv";
    return(file_name);
 }
 
@@ -46,17 +46,17 @@ bool is_multiple_of_fifteen() {
    return(MathMod(current_minute, 15) == 0); 
 }
 
-int make_file_handle() {
-   string file_name = make_file_name();
+int make_file_handle(int curr_period) {
+   string file_name = make_file_name(curr_period);
    Print("making file named  " + file_name);
    int file_handle = FileOpen(file_name, FILE_WRITE|FILE_CSV, ',');
    return(file_handle);
 }
 
-int get_num_bars() {
+int get_num_bars(int curr_period) {
    int num_bars;
    if (GET_ALL_BARS & !got_all_bars) {
-      num_bars = iBars(NULL, Period()) - 1;
+      num_bars = iBars(NULL, curr_period) - 1;
    } else {
       num_bars = SLICE_WINDOW_BARS;
    }
@@ -64,44 +64,41 @@ int get_num_bars() {
    return(num_bars);
 }
 
-void write_csv_lines(int csv_file, MqlRates &rates[], int num_bars) {
+void write_csv_lines(int csv_file, int curr_period, MqlRates &rates[], int num_bars) {
    for (int i = 0; i < num_bars; i++) {
       FileWrite(
          csv_file, 
-         Symbol(), Period(), rates[i].time, rates[i].open, rates[i].high, rates[i].low,
+         Symbol(), curr_period, rates[i].time, rates[i].open, rates[i].high, rates[i].low,
          rates[i].close, rates[i].tick_volume, rates[i].spread, rates[i].real_volume
       );
    }
    Print("Successfully wrote " + num_bars + " bars");
 }
 
-void process_time_slice(int csv_file) {
+void process_time_slice(int csv_file, int curr_period) {
    MqlRates rates[];
    ArraySetAsSeries(rates,true);
 
-   int num_bars = get_num_bars();   
-   int rate_slice = CopyRates(Symbol(), PERIOD_CURRENT, 1, num_bars, rates);
-   write_csv_lines(csv_file, rates, num_bars);
+   int num_bars = get_num_bars(curr_period);   
+   int rate_slice = CopyRates(Symbol(), curr_period, 1, num_bars, rates);
+   write_csv_lines(csv_file, curr_period, rates, num_bars);
 }
 
 int write_files() {
-   long curr_chart_id = ChartID();
-   // write files for all time frames
-   for (int i=0; i < 9; i++) {
-      ChartSetSymbolPeriod(curr_chart_id, NULL, time_periods[i]);
-
+   // for each time frame
+   for (int i = 0; i < 9; i++) {
+      int current_period = time_periods[i];
       Print("Opening file handle...");
-      string file_name = make_file_name();
-      int csv_file = make_file_handle();
-
+      string file_name = make_file_name(current_period);
+      int csv_file = make_file_handle(current_period);
       if (csv_file == INVALID_HANDLE)  {
          Print("file handle invalid! returning...");
          return(0);
       }
       write_csv_header(csv_file);
-      process_time_slice(csv_file);
+      process_time_slice(csv_file, current_period);
       FileClose(csv_file);
-   }
+   } 
    got_all_bars = True;
    return(0);
 }
@@ -162,17 +159,9 @@ int OnCalculate(const int rates_total,
                 const int &spread[]) {
 
    long current_chart_id = ChartID();
-   //Alert(got_all_bars);
    if (check_new_bar(REFRESH_PERIOD_MINS)) {
       write_files();
    }
-   
-   
-
-   //for (int i=0; i < 2; i++) {
-   //   ChartSetSymbolPeriod(current_chart_id, symbols[i], 0);
-   //   write_files();
-   // }
    return(0);
 
                 
