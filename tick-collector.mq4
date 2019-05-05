@@ -9,6 +9,7 @@ input bool GET_ALL_BARS = False;
 // globals
 int csv_file;
 string latest_date = "0";
+string symbols[];
 
 // functions ----------------------------------------------------------------------------
 
@@ -93,9 +94,29 @@ int write_file() {
    return(0);
 }
 
+int get_symbols() {
+   // inspired by 7bit and sxTed's Symbols.mqh
+   string symbol_name;
+   string symbol_file_name = "symbols_"+AccountServer()+".csv";
+
+   int symbols_handle=FileOpenHistory("symbols.raw", FILE_BIN|FILE_READ);
+   int num_rows = FileSize(symbols_handle) / 1936;
+   ArrayResize(symbols, num_rows);
+  
+   for (int i=0; i  < num_rows; i++) {
+      symbol_name = FileReadString(symbols_handle, 12);
+      Print(symbol_name);
+      symbols[i] = symbol_name;
+      FileSeek(symbols_handle, 1924, SEEK_CUR);
+   }
+   return(0);   
+}
+
+
 // main ---------------------------------------------------------------------------------
 
 int OnInit() {
+   get_symbols();
    RefreshRates();
    if (GET_ALL_BARS) {
       write_file();
@@ -120,7 +141,7 @@ int OnCalculate(const int rates_total,
    } 
    
    write_file();
-
+   
    return(0);
   }
 //+------------------------------------------------------------------+
