@@ -11,6 +11,7 @@ int csv_file;
 string latest_date = "0";
 
 // functions ----------------------------------------------------------------------------
+
 bool file_empty(int csv_file) {
    return(FileSize(csv_file) <= 5);
 }
@@ -33,30 +34,6 @@ string make_file_name() {
    return(file_name);
 }
 
-void process_time_slice(int csv_file) {
-   MqlRates rates[];
-   ArraySetAsSeries(rates,true);
-
-   int num_bars;   
-   if (GET_ALL_BARS) {
-      num_bars = iBars(NULL, PERIOD_CURRENT) - 1;
-   } else {
-      num_bars = SLICE_WINDOW_BARS;
-   }
-   
-   Print("Num bars is " + num_bars);
-   
-   int rate_slice = CopyRates(Symbol(), PERIOD_CURRENT, 1, num_bars, rates);
-
-   for (int i = 0; i < num_bars; i++) {
-      FileWrite(
-         csv_file, 
-         Symbol(),rates[i].time, rates[i].open, rates[i].high, rates[i].low,
-         rates[i].close, rates[i].tick_volume, rates[i].spread, rates[i].real_volume
-      );
-   }
-   Print("Successfully written " + num_bars + " bars");
-}
 
 bool is_multiple_of_fifteen() {
    int current_minute = TimeMinute(TimeLocal());
@@ -68,6 +45,37 @@ int make_file_handle() {
    Print("making file named  " + file_name);
    int file_handle = FileOpen(file_name, FILE_WRITE|FILE_CSV, ',');
    return(file_handle);
+}
+
+int get_num_bars() {
+   int num_bars;
+   if (GET_ALL_BARS) {
+      num_bars = iBars(NULL, PERIOD_CURRENT) - 1;
+   } else {
+      num_bars = SLICE_WINDOW_BARS;
+   }
+   Print("Num bars is " + num_bars);
+   return(num_bars);
+}
+
+void write_csv_lines(int csv_file, MqlRates &rates[], int num_bars) {
+   for (int i = 0; i < num_bars; i++) {
+      FileWrite(
+         csv_file, 
+         Symbol(),rates[i].time, rates[i].open, rates[i].high, rates[i].low,
+         rates[i].close, rates[i].tick_volume, rates[i].spread, rates[i].real_volume
+      );
+   }
+   Print("Successfully wrote " + num_bars + " bars");
+}
+
+void process_time_slice(int csv_file) {
+   MqlRates rates[];
+   ArraySetAsSeries(rates,true);
+
+   int num_bars = get_num_bars();   
+   int rate_slice = CopyRates(Symbol(), PERIOD_CURRENT, 1, num_bars, rates);
+   write_csv_lines(csv_file, rates, num_bars);
 }
 
 int write_file() {
