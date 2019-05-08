@@ -3,9 +3,8 @@
 #property indicator_chart_window
 
 // inputs
-input int SLICE_WINDOW_BARS = 15;
-input bool GET_ALL_BARS = False;
-input int REFRESH_PERIOD_MINS = 15;
+input bool GET_ALL_BARS = True;
+input int REFRESH_PERIOD_MINS = 240;
 
 // globals
 int csv_file;
@@ -14,7 +13,9 @@ string symbols[];
 int num_symbols;
 int time_periods[] = {1, 5, 15, 30, 60, 240, 1440, 10080, 43200};
 static bool got_all_bars = False;
+
 static datetime previous_bar_time;
+
 
 // functions ----------------------------------------------------------------------------
 
@@ -24,7 +25,7 @@ bool file_empty(int csv_file) {
 
 void write_csv_header(int csv_file_handle) {
    FileWrite(csv_file_handle, "symbol", "period", "time", "open", "high", "low", "close", 
-   "tick_volume", "spread", "real_volume"); 
+   "tick_volume"); 
 }
 
 string file_timestamp() {
@@ -41,11 +42,6 @@ string make_file_name(int period) {
 }
 
 
-bool is_multiple_of_fifteen() {
-   int current_minute = TimeMinute(TimeLocal());
-   return(MathMod(current_minute, 15) == 0); 
-}
-
 int make_file_handle(int curr_period) {
    string file_name = make_file_name(curr_period);
    Print("making file named  " + file_name);
@@ -53,27 +49,43 @@ int make_file_handle(int curr_period) {
    return(file_handle);
 }
 
+
 int get_num_bars(int curr_period) {
    int num_bars;
    if (GET_ALL_BARS & !got_all_bars) {
       num_bars = iBars(NULL, curr_period) - 1;
    } else {
-      num_bars = SLICE_WINDOW_BARS;
+      if (curr_period == 1) {
+         num_bars = 240;
+      } else if (curr_period == 240) {
+         num_bars = 1;      
+      } else {
+         num_bars = curr_period;
+      }
    }
    Print("Num bars is " + num_bars);
    return(num_bars);
 }
 
+
+string time_to_string(datetime rate_date) {
+   string date_string = TimeToStr(rate_date, TIME_DATE|TIME_SECONDS);
+   StringReplace(date_string, ".", "-");
+   return(date_string);
+}
+
+
 void write_csv_lines(int csv_file, int curr_period, MqlRates &rates[], int num_bars) {
    for (int i = 0; i < num_bars; i++) {
       FileWrite(
          csv_file, 
-         Symbol(), curr_period, rates[i].time, rates[i].open, rates[i].high, rates[i].low,
-         rates[i].close, rates[i].tick_volume, rates[i].spread, rates[i].real_volume
+         Symbol(), curr_period, time_to_string(rates[i].time), rates[i].open, rates[i].high,
+          rates[i].low, rates[i].close, rates[i].tick_volume
       );
    }
    Print("Successfully wrote " + num_bars + " bars");
 }
+
 
 void process_time_slice(int csv_file, int curr_period) {
    MqlRates rates[];
@@ -84,24 +96,21 @@ void process_time_slice(int csv_file, int curr_period) {
    write_csv_lines(csv_file, curr_period, rates, num_bars);
 }
 
-int write_files() {
-   // for each time frame
-   for (int i = 0; i < 9; i++) {
-      int current_period = time_periods[i];
-      Print("Opening file handle...");
-      string file_name = make_file_name(current_period);
-      int csv_file = make_file_handle(current_period);
-      if (csv_file == INVALID_HANDLE)  {
-         Print("file handle invalid! returning...");
-         return(0);
-      }
-      write_csv_header(csv_file);
-      process_time_slice(csv_file, current_period);
-      FileClose(csv_file);
-   } 
-   got_all_bars = True;
+
+int get_period_data(int period_to_get) {
+   Print("Opening file handle...");
+   string file_name = make_file_name(period_to_get);
+   int csv_file = make_file_handle(period_to_get);
+   if (csv_file == INVALID_HANDLE)  {
+      Print("file handle invalid! returning...");
+      return(-1);
+   }
+   write_csv_header(csv_file);
+   process_time_slice(csv_file, period_to_get);
+   FileClose(csv_file);
    return(0);
 }
+
 
 int get_symbols() {
    // inspired by 7bit and sxTed's Symbols.mqh
@@ -120,12 +129,6 @@ int get_symbols() {
    return(0);   
 }
 
-void wait_seconds(int seconds) {
-   datetime curr_time = TimeLocal();
-   while(TimeLocal() < curr_time + seconds) {
-   }
-}
-
 
 // inspired by Tadas Talaikis, TALAIKIS.COM
 bool check_new_bar(int period_mins) {
@@ -140,12 +143,15 @@ bool check_new_bar(int period_mins) {
 // main ---------------------------------------------------------------------------------
 
 int OnInit() {
-
    get_symbols();
    RefreshRates();
    ChartSetInteger(ChartID(), CHART_AUTOSCROLL, True);
+   get_period_data(1);
+   get_period_data(240);
+   got_all_bars = True;
    return(INIT_SUCCEEDED);
 }
+
 
 int OnCalculate(const int rates_total,
                 const int prev_calculated,
@@ -159,12 +165,13 @@ int OnCalculate(const int rates_total,
                 const int &spread[]) {
 
    long current_chart_id = ChartID();
-   if (check_new_bar(REFRESH_PERIOD_MINS)) {
-      write_files();
-   }
+   
+   if (check_new_bar(240)) {      
+      get_period_data(1);      
+      get_period_data(240);
+   } 
+   
    return(0);
-
-                
 }
 
 void OnDeinit(const int reason) {  
